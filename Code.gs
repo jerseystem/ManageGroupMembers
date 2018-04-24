@@ -3,7 +3,6 @@
  * @author Jeremy Lautman (jeremy.lautman@jerseystem.org)
  *****************************************************************************/
 
-
 /**
  * Entrypoint
  */
@@ -37,6 +36,7 @@ function main() {
   for (group in groupMemberships) {
     Logger.log("Getting all existing members of %s", groupKey);
     var existingMembersList = [];
+    // TODO if the group doesn't exist, create it.
     forEachMemberOfGroup(group, function(member) {
       existingMembersList.push(member.email);
     });
