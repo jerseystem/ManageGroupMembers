@@ -44,7 +44,11 @@ function main() {
     } catch (e) {
       // Group didn't already exist. Create it.
       Logger.log("Creating group %s", group);
-      createGroup(group);
+      try {
+        createGroup(group);
+      } catch(e1) {
+        Logger.log("Failed to create group %s", group);
+      }
       // TODO change group properties? Make it TEAM instead of PUBLIC?
     }
     var requestedMembersList = groupMemberships[group];
