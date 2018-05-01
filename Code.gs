@@ -22,6 +22,7 @@ function main() {
     group = values[row][1];
     // Simple error checking. Can check if the group or email is valid?
     if(!email || !group) {
+      Logger.log("Row %d is invalid", row);
       return;
     }
     if(group in groupMemberships) {
@@ -34,12 +35,18 @@ function main() {
   // For each group, add all members not already in the group and remove all members not
   // in the spreadsheet.
   for (group in groupMemberships) {
-    Logger.log("Getting all existing members of %s", groupKey);
+    Logger.log("Getting all existing members of %s", group);
     var existingMembersList = [];
-    // TODO if the group doesn't exist, create it.
-    forEachMemberOfGroup(group, function(member) {
-      existingMembersList.push(member.email);
-    });
+    try{
+      forEachMemberOfGroup(group, function(member) {
+        existingMembersList.push(member.email);
+      });
+    } catch (e) {
+      // Group didn't already exist. Create it.
+      Logger.log("Creating group %s", group);
+      createGroup(group);
+      // TODO change group properties? Make it TEAM instead of PUBLIC?
+    }
     var requestedMembersList = groupMemberships[group];
     
     // Add all members not already in the group
@@ -48,10 +55,10 @@ function main() {
       return !existingMembersSet.has(email);
     }).forEach(function(email) {
       try {
-        //addGroupMember(email, group);
+        addGroupMember(email, group);
         Logger.log("Added %s to %s", email, group);
       } catch (err) {
-        Logger.log('Failure: User %s already a member of group %s', userEmail, groupEmail);
+        Logger.log('Failure: User %s already a member of group %s', email, group);
       }
     });
     
@@ -61,7 +68,7 @@ function main() {
       return !requestedMembersSet.has(email);
     }).forEach(function(email) {
       try {
-        //removeGroupMember(email, group);
+        removeGroupMember(email, group);
         Logger.log("Removed %s from %s", email, group);
       } catch (err) {
         Logger.log('Failure: User %s already not a member of group %s', userEmail, groupEmail);
@@ -71,31 +78,41 @@ function main() {
 }
 
 /**
- * Gets all current members of the group, and returns them in a list.
+ * Calls a function on each member of a group, returning nothing.
  * @param groupKey The group to query
  * @param fn       The function to call on each member object as yielded
  *                 from the AdminDirectory.
- * @return A Set containing all email addresses in the group as strings
+ * @throws An error if the group doesn't exist
  */
 function forEachMemberOfGroup(groupKey, fn) {
   var pageToken, page;
-  var results = [];
   do {
     page = AdminDirectory.Members.list(groupKey, {pageToken: pageToken});
     (page.members ? page.members : []).forEach(fn);
     pageToken = page.nextPageToken;
   } while (pageToken);
-  return results;
+}
+
+/**
+ * Creates a new group.
+ * @param group The email address of the group.
+ * @return The json object returned from the API.
+ */
+function createGroup(group) {
+  return AdminDirectory.Groups.insert({
+    email: group
+  });
 }
 
 /**
  * Adds an email address to a group as a member.
  * @param userEmail The email to add.
  * @param groupEmail The email group.
+ * @return The json object returned from the API.
  * @throws Error If the email is already in the group.
  */
 function addGroupMember(userEmail, groupEmail) {
-  AdminDirectory.Members.insert({
+  return AdminDirectory.Members.insert({
     email: userEmail,
     role: 'MEMBER'
   }, groupEmail);
@@ -105,8 +122,9 @@ function addGroupMember(userEmail, groupEmail) {
  * Removes an email address from a group.
  * @param userEmail The email to remove.
  * @param groupEmail The email group.
+ * @return The json object returned from the API.
  * @throws Error If the email isn't in the group.
  */
 function removeGroupMember(userEmail, groupEmail) {
-  AdminDirectory.Members.remove(groupEmail, userEmail);
+  return AdminDirectory.Members.remove(groupEmail, userEmail);
 }
