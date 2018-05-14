@@ -10,6 +10,10 @@ function onOpen() {
   setMenu();
 }
 
+function onInstall(e) {
+  onOpen(e);
+}
+
 function setMenu() {
   var ui = SpreadsheetApp.getUi();
   var menus = [];
@@ -20,7 +24,7 @@ function setMenu() {
   
   // Can schedule a time to run.
   ui = ui.addItem("Schedule Run Time", "scheduleRunTime")
-         .addItem("Run Now", "runGroupManagement");
+         .addItem("Run Now", "runGroupManagementWithDisplay");
   
   if(groupMgmtTime) {
     // Has a group management time. Can cancel it.
@@ -58,7 +62,7 @@ function scheduleRunTime() {
 
   cancelRunTime();
   props.setProperty("GroupMgmtTime", timeStr);
-  ScriptApp.newTrigger("runGroupManagement")
+  ScriptApp.newTrigger("runGroupManagementNoDisplay")
       .timeBased().everyDays(1)
       .atHour(time)
       .create();
@@ -69,16 +73,26 @@ function cancelRunTime() {
   PropertiesService.getDocumentProperties().deleteProperty("GroupMgmtTime");
   SpreadsheetApp.getActiveSpreadsheet();
   ScriptApp.getProjectTriggers().forEach(function(trigger) {
-    if(trigger.getHandlerFunction() == "runGroupManagement") {
+    if(trigger.getHandlerFunction() == "runGroupManagementNoDisplay") {
       ScriptApp.deleteTrigger(trigger);
     }
   });
   setMenu();
 }
 
-function runGroupManagement() {
+function runGroupManagementNoDisplay() {
+  runGroupManagement(false);
+}
+
+function runGroupManagementWithDisplay() {
+  runGroupManagement(true);
+}
+
+function runGroupManagement(displayResults) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var membersSheet = ss.getSheetByName("Members");
+  var events = [];
+  var msg;
   membersSheet.activate();
   // Build a map of groups -> [emails] from the spreadsheet
   // Assumes that there are no duplicate rows
@@ -90,7 +104,9 @@ function runGroupManagement() {
     group = values[row][1];
     // Simple error checking. Can check if the group or email is valid?
     if(!email || !group) {
-      Logger.log("Row %d is invalid", row);
+      msg = "Row " + row + "is invalid";
+      Logger.log(msg);
+      events.push(msg);
       return;
     }
     if(group in groupMemberships) {
@@ -111,11 +127,15 @@ function runGroupManagement() {
       });
     } catch (e) {
       // Group didn't already exist. Create it.
-      Logger.log("Creating group %s", group);
       try {
         createGroup(group);
+        msg = "Created group " + group;
+        Logger.log(msg);
+        events.push(msg);
       } catch(e1) {
-        Logger.log("Failed to create group %s", group);
+        msg = "Failed to create group " + group;
+        Logger.log(msg);
+        events.push(msg);
         continue;
       }
       // TODO change group properties? Make it TEAM instead of PUBLIC?
@@ -130,9 +150,13 @@ function runGroupManagement() {
     }).forEach(function(email) {
       try {
         addGroupMember(email, group);
-        Logger.log("Added %s to %s", email, group);
+        msg = "Added " + email + " to " + group;
+        Logger.log(msg);
+        events.push(msg);
       } catch (err) {
-        Logger.log('Failure: User %s already a member of group %s', email, group);
+        msg = "Failure: User "+ email + " is already a member of group " + group;
+        Logger.log(msg);
+        events.push(msg);
       }
     });
     
@@ -143,12 +167,28 @@ function runGroupManagement() {
     }).forEach(function(email) {
       try {
         removeGroupMember(email, group);
-        Logger.log("Removed %s from %s", email, group);
+        msg = "Removed " + email + " from " + group;
+        Logger.log(msg);
+        events.push(msg);
       } catch (err) {
-        Logger.log('Failure: User %s already not a member of group %s', userEmail, groupEmail);
+        msg = "Failure: User " + email + " already not a member of group " + group;
+        Logger.log(msg);
+        events.push(msg);
       }
     });
-  };
+  }
+  if (displayResults) {
+    displayEventList("Run Results", events);
+  }
+}
+
+/**
+ * Displays a list of events with a UI alert.
+ */
+function displayEventList(title, eventList) {
+  var ui = SpreadsheetApp.getUi();
+  var events = eventList.join('\n');
+  var result = ui.alert(title, events ? events : '(None)', ui.ButtonSet.OK);
 }
 
 /**
