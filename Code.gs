@@ -13,18 +13,14 @@ function onOpen() {
 function setMenu() {
   var ui = SpreadsheetApp.getUi();
   var menus = [];
-  var groupAddr = PropertiesService.getDocumentProperties().getProperty("GroupAddr");
-  Logger.log("groupAddr %s", groupAddr);
   var groupMgmtTime = PropertiesService.getDocumentProperties().getProperty("GroupMgmtTime");
   Logger.log("groupMgmtTime %s", groupMgmtTime);
   
-  ui = ui.createAddonMenu().addItem("Set Group Address", "setGroupName");
+  ui = ui.createAddonMenu();
   
-  if(groupAddr) {
-    // Has a group address. Can schedule a time to run.
-    ui = ui.addItem("Schedule Run Time", "scheduleRunTime")
-           .addItem("Run Now", "runGroupManagement");
-  }
+  // Can schedule a time to run.
+  ui = ui.addItem("Schedule Run Time", "scheduleRunTime")
+         .addItem("Run Now", "runGroupManagement");
   
   if(groupMgmtTime) {
     // Has a group management time. Can cancel it.
@@ -32,28 +28,6 @@ function setMenu() {
   }
 
   ui.addToUi();
-}
-
-function setGroupName() {
-  var props = PropertiesService.getDocumentProperties();
-  var groupAddr = props.getProperty("GroupAddr");
-  
-  var ui = SpreadsheetApp.getUi();
-  var resp = ui.prompt(
-    "Set group email address",
-    "Please enter a group email address." + 
-        (groupAddr ? " ("+ groupAddr +")" : ""),
-    ui.ButtonSet.OK_CANCEL);
-  if(resp.getSelectedButton() == ui.Button.OK) {
-    if(resp.getResponseText()){
-      props.setProperty(
-        "GroupAddr",
-        resp.getResponseText());
-    } else {
-      props.deleteProperty("GroupAddr");
-    }
-    setMenu();
-  }
 }
 
 /**
@@ -103,68 +77,78 @@ function cancelRunTime() {
 }
 
 function runGroupManagement() {
-  var group = PropertiesService.getDocumentProperties().getProperty("GroupAddr");
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var membersSheet = ss.getSheetByName("Members");
   membersSheet.activate();
-  // Build a [emails] from the spreadsheet
+  // Build a map of groups -> [emails] from the spreadsheet
+  // Assumes that there are no duplicate rows
+  var groupMemberships = {};
   var values = membersSheet.getDataRange().getValues();
-  var emails = [];
-  var email;
+  var email, group;
   for(var row=1; row < values.length; row++) {
     email = values[row][0];
+    group = values[row][1];
     // Simple error checking. Can check if the group or email is valid?
-    if(!email) {
+    if(!email || !group) {
       Logger.log("Row %d is invalid", row);
       return;
     }
-    emails.push(email);
+    if(group in groupMemberships) {
+      groupMemberships[group].push(email);
+    } else {
+      groupMemberships[group] = [email];
+    }
   }
   
-  // Add all members not already in the group and remove all members not
+  // For each group, add all members not already in the group and remove all members not
   // in the spreadsheet.
-  Logger.log("Getting all existing members of %s", group);
-  var existingMembersList = [];
-  try{
-    forEachMemberOfGroup(group, function(member) {
-      existingMembersList.push(member.email);
-    });
-  } catch (e) {
-    // Group didn't already exist. Create it.
-    Logger.log("Creating group %s", group);
-    try {
-      createGroup(group);
-    } catch(e1) {
-      Logger.log("Failed to create group %s", group);
-      return; // Failed
+  for (group in groupMemberships) {
+    Logger.log("Getting all existing members of %s", group);
+    var existingMembersList = [];
+    try{
+      forEachMemberOfGroup(group, function(member) {
+        existingMembersList.push(member.email);
+      });
+    } catch (e) {
+      // Group didn't already exist. Create it.
+      Logger.log("Creating group %s", group);
+      try {
+        createGroup(group);
+      } catch(e1) {
+        Logger.log("Failed to create group %s", group);
+        continue;
+      }
+      // TODO change group properties? Make it TEAM instead of PUBLIC?
+      // How to configure this?
     }
-    // TODO change group properties? Make it TEAM instead of PUBLIC?
-  }
+    var requestedMembersList = groupMemberships[group];
     
-  // Add all members not already in the group
-  var existingMembersSet = new Set(existingMembersList);
-  emails.filter(function(email) {
-    return !existingMembersSet.has(email);
-  }).forEach(function(email) {
-    try {
-      addGroupMember(email, group);
-      Logger.log("Added %s to %s", email, group);
-    } catch (err) {
-      Logger.log('Failure: User %s already a member of group %s', email, group);
-    }
-  });
-  // Remove all members in the group not in the spreadsheet
-  var emailsSet = new Set(emails);
-  existingMembersList.filter(function(email) {
-    return !emailsSet.has(email);
-  }).forEach(function(email) {
-    try {
-      removeGroupMember(email, group);
-      Logger.log("Removed %s from %s", email, group);
-    } catch (err) {
-      Logger.log('Failure: User %s already not a member of group %s', userEmail, groupEmail);
-    }
-  });
+    // Add all members not already in the group
+    var existingMembersSet = new Set(existingMembersList);
+    requestedMembersList.filter(function(email) {
+      return !existingMembersSet.has(email);
+    }).forEach(function(email) {
+      try {
+        addGroupMember(email, group);
+        Logger.log("Added %s to %s", email, group);
+      } catch (err) {
+        Logger.log('Failure: User %s already a member of group %s', email, group);
+      }
+    });
+    
+    // Remove all members in the group not in the spreadsheet
+    var requestedMembersSet = new Set(requestedMembersList);
+    existingMembersList.filter(function(email) {
+      return !requestedMembersSet.has(email);
+    }).forEach(function(email) {
+      try {
+        removeGroupMember(email, group);
+        Logger.log("Removed %s from %s", email, group);
+      } catch (err) {
+        Logger.log('Failure: User %s already not a member of group %s', userEmail, groupEmail);
+      }
+    });
+  };
 }
 
 /**
