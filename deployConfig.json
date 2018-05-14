@@ -1,4 +1,5 @@
 {
   "spreadsheetID": "1d9QTbX_fUJoIEU1WU0b33Nvi1uyKm8LyM0fmbBLiJG8",
-  "spreadsheetName": "GroupMembers"
+  "spreadsheetName": "GroupMembers",
+  "detailedDescription": "Manage google groups from an easy to use spreadsheet. Can be configured to run every day at a certain time, or run on demand.\n\nThe add-on looks for a sheet named \"Members\" within your Sheets document with two columns, \"Email\" and \"Group\". Each line represents a single group membership.\n\nOn every run, the add-on will add and remove members from groups referenced in the sheet. It will create any missing groups, but it will not delete any groups."
 }
