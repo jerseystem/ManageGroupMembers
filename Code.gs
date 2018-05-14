@@ -6,29 +6,29 @@
 /**
  * Entrypoint
  */
-function onOpen() {
-  setMenu();
+function onOpen(e) {
+  setMenu(e);
 }
 
 function onInstall(e) {
   onOpen(e);
 }
 
-function setMenu() {
+function setMenu(e) {
   var ui = SpreadsheetApp.getUi();
   var menus = [];
-  var groupMgmtTime = PropertiesService.getDocumentProperties().getProperty("GroupMgmtTime");
-  Logger.log("groupMgmtTime %s", groupMgmtTime);
-  
   ui = ui.createAddonMenu();
-  
+
   // Can schedule a time to run.
   ui = ui.addItem("Schedule Run Time", "scheduleRunTime")
          .addItem("Run Now", "runGroupManagementWithDisplay");
-  
-  if(groupMgmtTime) {
-    // Has a group management time. Can cancel it.
-    ui = ui.addItem("Cancel Scheduled Run", "cancelRunTime");
+
+  if (!e || e.authMode != ScriptApp.AuthMode.NONE) {
+    var groupMgmtTime = PropertiesService.getDocumentProperties().getProperty("GroupMgmtTime");
+    if(groupMgmtTime) {
+      // Has a group management time. Can cancel it.
+      ui = ui.addItem("Cancel Scheduled Run", "cancelRunTime");
+    }
   }
 
   ui.addToUi();
@@ -39,7 +39,7 @@ function setMenu() {
  * Schedules the group management to run every day at the time indicated.
  * Only allows users to input a time between 0 and 23.
  */
-function scheduleRunTime() {
+function scheduleRunTime(e) {
   var props = PropertiesService.getDocumentProperties();
   var timeStr = props.getProperty("GroupMgmtTime");
   var ui = SpreadsheetApp.getUi();
@@ -66,10 +66,10 @@ function scheduleRunTime() {
       .timeBased().everyDays(1)
       .atHour(time)
       .create();
-  setMenu();
+  setMenu(e);
 }
 
-function cancelRunTime() {
+function cancelRunTime(e) {
   PropertiesService.getDocumentProperties().deleteProperty("GroupMgmtTime");
   SpreadsheetApp.getActiveSpreadsheet();
   ScriptApp.getProjectTriggers().forEach(function(trigger) {
@@ -77,7 +77,7 @@ function cancelRunTime() {
       ScriptApp.deleteTrigger(trigger);
     }
   });
-  setMenu();
+  setMenu(e);
 }
 
 function runGroupManagementNoDisplay() {
